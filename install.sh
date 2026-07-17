@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shadowsocks Rust SS2022 Installation Script
-# Modified Version
+# Modified Version with Time Synchronization
 
 # 颜色定义
 RED='\033[0;31m'
@@ -19,10 +19,54 @@ check_root() {
     fi
 }
 
-# 生成随机密码和端口 (修改为生成 32 字节 Base64 密钥)
+# 安装依赖包 (新增 chrony 和 tzdata)
+install_dependencies() {
+    echo -e "${CYAN}安装必要的依赖包...${PLAIN}"
+    
+    if command -v apt-get &>/dev/null; then
+        apt-get update -q
+        apt-get install -y -q gzip wget curl unzip xz-utils jq openssl chrony tzdata
+    elif command -v dnf &>/dev/null; then
+        dnf -q update -y
+        dnf -q install -y gzip wget curl unzip xz jq openssl chrony tzdata
+    elif command -v yum &>/dev/null; then
+        yum -q update -y
+        yum -q install -y epel-release
+        yum -q install -y gzip wget curl unzip xz jq openssl chrony tzdata
+    else
+        echo -e "${RED}不支持的Linux发行版，请手动安装依赖！${PLAIN}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}依赖包安装完成${PLAIN}"
+}
+
+# 同步系统时间 (新增函数)
+sync_system_time() {
+    echo -e "${CYAN}正在配置系统时区并强制同步时间...${PLAIN}"
+    
+    # 设置时区为亚洲/上海
+    timedatectl set-timezone Asia/Shanghai 2>/dev/null
+    
+    # 启动 chrony 服务 (兼容不同发行版的进程命名)
+    if systemctl list-unit-files | grep -qw chronyd.service; then
+        systemctl enable chronyd --now >/dev/null 2>&1
+    else
+        systemctl enable chrony --now >/dev/null 2>&1
+    fi
+    
+    # 强制步进同步时间以消除误差
+    if command -v chronyc &>/dev/null; then
+        chronyc makestep >/dev/null 2>&1
+        echo -e "${GREEN}系统时间同步完成。当前服务器时间: $(date)${PLAIN}"
+    else
+        echo -e "${YELLOW}警告: 无法执行 chronyc 命令，时间同步可能未完全生效。${PLAIN}"
+    fi
+}
+
+# 生成随机密码和端口
 generate_credentials() {
     echo -e "${CYAN}正在生成 SS2022 标准 32 字节 Base64 密钥...${PLAIN}"
-    # 使用 openssl 生成符合 SS2022 规范的 256 位密码
     SS_PASSWORD=$(openssl rand -base64 32)
     echo -e "${GREEN}密钥生成成功: ${SS_PASSWORD}${PLAIN}"
 
@@ -59,28 +103,6 @@ get_server_ip() {
         echo -e "${RED}无法获取服务器IP地址，请手动检查网络连接${PLAIN}"
         IP="<未知IP地址>"
     fi
-}
-
-# 安装依赖包 (加入 openssl 依赖)
-install_dependencies() {
-    echo -e "${CYAN}安装必要的依赖包...${PLAIN}"
-    
-    if command -v apt-get &>/dev/null; then
-        apt-get update -q
-        apt-get install -y -q gzip wget curl unzip xz-utils jq openssl
-    elif command -v dnf &>/dev/null; then
-        dnf -q update -y
-        dnf -q install -y gzip wget curl unzip xz jq openssl
-    elif command -v yum &>/dev/null; then
-        yum -q update -y
-        yum -q install -y epel-release
-        yum -q install -y gzip wget curl unzip xz jq openssl
-    else
-        echo -e "${RED}不支持的Linux发行版，请手动安装依赖：gzip wget curl unzip xz-utils/xz jq openssl${PLAIN}"
-        exit 1
-    fi
-    
-    echo -e "${GREEN}依赖包安装完成${PLAIN}"
 }
 
 # 确定系统架构
@@ -158,7 +180,7 @@ install_shadowsocks() {
     echo -e "${GREEN}Shadowsocks Rust 安装完成！${PLAIN}"
 }
 
-# 配置Shadowsocks (修改加密方式为 SS2022)
+# 配置Shadowsocks
 configure_shadowsocks() {
     echo -e "${CYAN}配置Shadowsocks...${PLAIN}"
     
@@ -199,11 +221,11 @@ EOF
     echo -e "${GREEN}Shadowsocks 配置完成！${PLAIN}"
 }
 
-# 生成客户端配置 (更新输出信息及 URL 拼接格式)
+# 生成客户端配置 (严格遵循 SIP002 规范)
 generate_client_info() {
     echo -e "${CYAN}生成客户端配置信息...${PLAIN}"
     
-    SS_LINK=$(echo -n "2022-blake3-aes-256-gcm:${SS_PASSWORD}@${IP}:${SS_PORT}" | base64 -w 0)
+    USER_INFO=$(echo -n "2022-blake3-aes-256-gcm:${SS_PASSWORD}" | base64 -w 0 | tr '+/' '-_' | tr -d '=')
     
     SS_STATUS=$(systemctl is-active shadowsocks.service)
     if [[ "$SS_STATUS" == "active" ]]; then
@@ -229,7 +251,7 @@ generate_client_info() {
     echo -e ""
     echo -e "${YELLOW}SS URL:${PLAIN}"
     echo -e ""
-    echo -e "ss://${SS_LINK}"
+    echo -e "ss://${USER_INFO}@${IP}:${SS_PORT}"
     echo -e ""
     echo -e "${GREEN}可使用此URL在客户端快速导入配置${PLAIN}"
     echo -e "==========================================="
@@ -239,6 +261,7 @@ generate_client_info() {
 main() {
     check_root
     install_dependencies
+    sync_system_time
     generate_credentials
     detect_architecture
     install_shadowsocks
