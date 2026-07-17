@@ -17,6 +17,6 @@ SS2022 一键脚本
 
 请务必确保以 `root` 权限登录您的 Linux 服务器，在终端中复制并运行以下命令即可开始全自动安装：
 
-**推荐使用 `bash` 执行：**
+**推荐使用 `wget` 执行：**
 ```bash
 bash <(wget -qO- [https://raw.githubusercontent.com/lanjiangqaq/SS2022-sh/main/install.sh](https://raw.githubusercontent.com/lanjiangqaq/SS2022-sh/main/install.sh))
