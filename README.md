@@ -19,4 +19,4 @@ SS2022 一键脚本
 
 **推荐使用 `wget` 执行：**
 ```bash
-bash <(wget -qO- [https://raw.githubusercontent.com/lanjiangqaq/SS2022-sh/main/install.sh](https://raw.githubusercontent.com/lanjiangqaq/SS2022-sh/main/install.sh))
+bash <(wget -qO- https://raw.githubusercontent.com/lanjiangqaq/SS2022-sh/main/install.sh)
